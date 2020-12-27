@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ExecutorConfiguration {
+public struct ExecutorConfiguration: Hashable {
     private let baseUrlString: String
     private let login: String
     private let password: String
@@ -21,5 +21,9 @@ public struct ExecutorConfiguration {
 
     public var credentials: String {
         return "Basic " + "\(login):\(password)".data(using: .utf8)!.base64EncodedString(options: Data.Base64EncodingOptions(rawValue: 0))
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(baseUrlString)
     }
 }
