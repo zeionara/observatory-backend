@@ -4,6 +4,7 @@ import PerfectHTTPServer
 import StORM
 import MongoDBStORM
 import Foundation
+import FoundationNetworking
 
 func convertStringToDictionary(text: String) -> [String:AnyObject]? {
     if let data = text.data(using: .utf8) {
@@ -27,10 +28,70 @@ enum AuthenticationError: Error {
     case cannotAuthenticate(message: String)
 }
 
+enum ExperimentError: Error {
+    case executorsAreNotAvailable(message: String)
+}
+
 func setupCorsHeaders(_ response: HTTPResponse) -> HTTPResponse {
     response.setHeader(.accessControlAllowOrigin, value: "*")
     response.setHeader(.accessControlAllowHeaders, value: "*")
     return response
+}
+
+func getExecutorLoadStatus(config: ExecutorConfiguration, timeout: Double = 30) {
+    let configuration = URLSessionConfiguration.default
+    configuration.timeoutIntervalForRequest = timeout
+    configuration.timeoutIntervalForResource = timeout
+    let session = URLSession(configuration: configuration)
+    
+    let url = config.loadStatusUrl
+    var request = URLRequest(url: url)
+    print(url)
+    request.httpMethod = "GET"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+    request.setValue(config.credentials, forHTTPHeaderField: "Authorization")
+    
+    // let parameters = ["username": "foo", "password": "123456"]
+    
+    // do {
+    //     request.httpBody = try JSONSerialization.data(withJSONObject: parameters, options: .prettyPrinted)
+    // } catch let error {
+    //     print(error.localizedDescription)
+    // }
+    
+    let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+        
+        print(response ?? "")
+        print(error ?? "")
+        print(data ?? "")
+
+        if error != nil || data == nil {
+            print("Client error!")
+            return
+        }
+        
+        guard let response = response as? HTTPURLResponse, (200...299).contains(response.statusCode) else {
+            print("Oops!! there is server error!")
+            return
+        }
+        
+        guard let mime = response.mimeType, mime == "application/json" else {
+            print("response is not json")
+            return
+        }
+        
+        do {
+            let json = try JSONSerialization.jsonObject(with: data!, options: [])
+            print("The Response is : ",json)
+        } catch {
+            print("JSON error: \(error.localizedDescription)")
+        }
+        
+    })
+    
+    task.resume()
 }
 
 // extension Encodable {
@@ -64,6 +125,11 @@ func setupCorsHeaders(_ response: HTTPResponse) -> HTTPResponse {
 public let USERS_COLLECTION_NAME = "test-users"
 public let SIGN_IN_ROUTE = "/sign-in"
 public var activeTokens = [String: Double]()
+public let experimentExecutors = [
+    "link-prediction": [
+        ExecutorConfiguration(url: "http://localhost:1719", login:"", password: "")
+    ]
+]
 
 // public let EXPERIMENTS_COLLECTION_NAME = "test-experiments"
 // public let N_MAX_CONCURRENT_EXPERIMENTS = 2
@@ -101,92 +167,13 @@ struct StartServer: ParsableCommand {
     @Option(help: "Number of seconds for authentication tokens to be active")
     private var tokenMaxLifespan: Double = 604800 // 1 week
 
-    // func parseRequestParameter(request: HTTPRequest, paramName: String, flag: String) -> [String] {
-    //     if let paramValue = request.param(name: paramName) {
-    //         return [flag, paramValue]
-    //     } else {
-    //         return []
-    //     }
-    // }
-
-    // func runExperiment(request: HTTPRequest, response: HTTPResponse) {
-    //     do {
-
-    //         // Initialize a new experiment
-
-    //         let experiment = Experiment()
-            
-    //         experiment.id = experiment.newUUID()
-    //         experiment.isCompleted = false
-    //         experiment.startTimestamp = NSDate().timeIntervalSince1970
-    //         experiment.progress = 0.0
-
-    //         let params = parseRequestParameter(request: request, paramName: "model", flag: "-m") + parseRequestParameter(request: request, paramName: "dataset", flag: "-d")
-            
-    //         var command = try CrossValidate.parse(params)
-    //         experiment.params = try command.asDictionary()
-    //         try experiment.save()
-
-    //         DispatchQueue.global(qos: .userInitiated).async { [self] in
-
-    //             // Increment number of active experiments
-                
-    //             nActiveExperimentsLock.lock()
-    //             // let runningExperimentIndex = nActiveExperiments
-    //             nActiveExperiments += 1
-    //             nActiveExperimentsLock.unlock()
-
-    //             // Obtain a semaphore
-
-    //             experimentConcurrencySemaphore.wait()
-                
-    //             // for i in 0..<10 {
-    //             //     print("\(runningExperimentIndex): \(i)")
-    //             //     sleep(2)
-    //             // }
-
-    //             // Run the initialized experiment
-
-    //             let metrics = try! command.run()
-
-    //             if experiment.progress < 1 {
-    //                 experiment.progress = 1
-    //             }
-    //             experiment.completionTimestamp = NSDate().timeIntervalSince1970
-    //             experiment.isCompleted = true
-    //             experiment.metrics = metrics
-    //             experiment.params = try! command.asDictionary()
-
-    //             try! experiment.save()
-
-    //             // Release a semaphore
-
-    //             experimentConcurrencySemaphore.signal()
-
-    //             // Decrement number of running experiments
-                
-    //             nActiveExperimentsLock.lock()
-    //             nActiveExperiments -= 1
-    //             nActiveExperimentsLock.unlock()
-
-    //         }
-    //         response.setHeader(.contentType, value: "application/json")
-    //         // response.appendBody(string: try experiment.asDataDict(1).jsonEncodedString())
-    //         response.appendBody(string: String(data: try! JSONEncoder().encode(["experiment-id": experiment.id]), encoding: .utf8)!)
-    //     } catch {
-    //         response.setHeader(.contentType, value: "text/html")
-    //         response.appendBody(string: "<html><title>Exception!</title><body>\(error)</body></html>")
-    //     }
-    //     response.completed()
-    // }
-
     func generateToken() -> String {
         return String((0..<tokenLength).map{ _ in tokenCharset.randomElement()! })
     }
 
     func signIn(request: HTTPRequest, response: HTTPResponse) {
         do {
-            let requestBody = request.postBody!
+            let requestBody = request.postBody ?? [String: Any]()
             let user = User()
             try user.find(["login": requestBody["login"] ?? ""])
             
@@ -218,6 +205,29 @@ struct StartServer: ParsableCommand {
     func signOut(request: HTTPRequest, response: HTTPResponse) {
         if let token = request.header(.authorization) {
             activeTokens[token] = nil
+        }
+        response.completed()
+    }
+
+    func startExperiment(request: HTTPRequest, response: HTTPResponse) {
+        do {
+            let requestBody = request.postBody ?? [String: Any]()
+            print("Starting an experiment with params: ")
+            print(requestBody)
+
+            let experimentTypeName = "\(requestBody["type"] ?? "")"
+            if let experimentExecutorUrls = experimentExecutors[experimentTypeName] {
+                print("Found executors: \(experimentExecutorUrls)")
+                experimentExecutorUrls.map{ config in
+                    getExecutorLoadStatus(config: config)
+                }
+            } else {
+                throw ExperimentError.executorsAreNotAvailable(message: "Cannot assign an executor")
+            }
+        } catch {
+            response.setHeader(.contentType, value: "text/html")
+            response.status = .internalServerError
+            response.appendBody(string: "<html><title>Exception!</title><body>Experiment cannot be started</body></html>")
         }
         response.completed()
     }
@@ -266,7 +276,8 @@ struct StartServer: ParsableCommand {
         
         var routes = Routes()
         routes.add(method: .post, uri: SIGN_IN_ROUTE, handler: signIn)
-        routes.add(method: .post, uri: "sign-out", handler: signOut)
+        routes.add(method: .post, uri: "/sign-out", handler: signOut)
+        routes.add(method: .post, uri: "/start-experiment", handler: startExperiment)
         routes.add(method: .get, uri: "/is-authenticated", handler: isAuthenticated)
         routes.add(method: .options, uri: "/*", handler: sendOptions)
         
