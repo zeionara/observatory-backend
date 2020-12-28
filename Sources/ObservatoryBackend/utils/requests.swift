@@ -1,5 +1,6 @@
 import FoundationNetworking
 import Foundation
+import PerfectHTTP
 
 private func executeQuery(request: URLRequest, timeout: Double = 30, defaultResult: String = "", handleCompletion: @escaping ([String: Any]?) -> Void) {
     let configuration = URLSessionConfiguration.default
@@ -68,5 +69,11 @@ public func executeExperiment(config: ExecutorConfiguration, timeout: Double = 3
         } else {
             handleCompletion(Optional.none)
         }
+    }
+}
+
+extension HTTPRequest {
+    public var postBody: [String: AnyObject]? {
+        return convertStringToDictionary(text: postBodyString ?? "")
     }
 }
