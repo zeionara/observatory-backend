@@ -5,6 +5,7 @@ import StORM
 import MongoDBStORM
 import Foundation
 import FoundationNetworking
+// import PerfectMongoDB
 
 public let USERS_COLLECTION_NAME = "test-users"
 public let EXPERIMENTS_COLLECTION_NAME = "test-experiments"
@@ -14,6 +15,10 @@ public var activeTokens = ["kk": NSDate().timeIntervalSince1970] // [String: Dou
 public let DEFAULT_LOAD_STATUS: Float = 10000
 
 struct StartServer: ParsableCommand {
+
+    // private enum CodingKeys: String, CodingKey {
+    //     case port, dbHost, dbPort, dbName, dbLogin, dbPassword, tokenLength, tokenCharset, tokenMaxLifespan
+    // }
 
     @Option(name: .shortAndLong, help: "Port for the server to listen to")
     private var port: Int = 1720
@@ -42,6 +47,10 @@ struct StartServer: ParsableCommand {
     @Option(help: "Number of seconds for authentication tokens to be active")
     private var tokenMaxLifespan: Double = 604800 // 1 week
 
+    // internal var dbClient: MongoClient {
+    //     try! MongoClient(uri: "mongodb+srv://\(dbLogin):\(dbPassword)@\(dbHost)")
+    // }
+
     func sendOptions(request: HTTPRequest, response: HTTPResponse) {
         response.completed()
     }
@@ -68,6 +77,7 @@ struct StartServer: ParsableCommand {
         routes.add(method: .post, uri: "/start-experiment", handler: startExperiment)
         routes.add(method: .get, uri: "/is-authenticated", handler: isAuthenticated)
         routes.add(method: .get, uri: "/get-experiment", handler: queryExperiment)
+        routes.add(method: .get, uri: "/get-experiments", handler: queryExperiments)
         routes.add(method: .options, uri: "/*", handler: sendOptions)
         
         try HTTPServer.launch(

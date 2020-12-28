@@ -56,3 +56,12 @@ class Experiment: MongoDBStORM {
 		return rows
 	}
 }
+
+extension Experiment: FullyTraversible {
+    static func findAll(_ data: [String : Any] = [String : Any]()) throws -> [Experiment] {
+		let experiment = Experiment()
+		return try experiment.findAll([String: Any]()) {
+			return Experiment()
+		}
+    }
+}
