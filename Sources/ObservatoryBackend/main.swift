@@ -30,6 +30,7 @@ enum AuthenticationError: Error {
 
 enum ExperimentError: Error {
     case executorsAreNotAvailable(message: String)
+    case invalidExperimentArguments(message: String)
 }
 
 enum EncodingError: Error {
@@ -43,146 +44,17 @@ func setupCorsHeaders(_ response: HTTPResponse) -> HTTPResponse {
     return response
 }
 
-func getExecutorLoadStatus(config: ExecutorConfiguration, timeout: Double = 30, handleCompletion: @escaping (Float) -> Void) {
-    let configuration = URLSessionConfiguration.default
-    configuration.timeoutIntervalForRequest = timeout
-    configuration.timeoutIntervalForResource = timeout
-    let session = URLSession(configuration: configuration)
-    
-    let url = config.loadStatusUrl
-    var request = URLRequest(url: url)
-    print(url)
-    request.httpMethod = "GET"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-    request.setValue(config.credentials, forHTTPHeaderField: "Authorization")
-    
-    // let parameters = ["username": "foo", "password": "123456"]
-    
-    // do {
-    //     request.httpBody = try JSONSerialization.data(withJSONObject: parameters, options: .prettyPrinted)
-    // } catch let error {
-    //     print(error.localizedDescription)
-    // }
-    
-    let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
-        do {
-            guard let unwrappedData = data else {
-                throw EncodingError.cannotEncodeObject(message: "Cannot unwrap response data")
-            }
-            guard let json = try JSONSerialization.jsonObject(with: unwrappedData, options: []) as? [String: Any] else {
-                throw EncodingError.cannotEncodeObject(message: "Cannot interpret json as a dictionary")
-            }
-            print("3")
-            handleCompletion(
-                ("\(json["value"] ?? "\(DEFAULT_LOAD_STATUS)")" as NSString).floatValue
-            )
-        } catch let error {
-            print("Error occurred: \(error)")
-            print("2")
-            handleCompletion(DEFAULT_LOAD_STATUS)
-        }
-    })
-    
-    task.resume()
-}
-
-func executeExperiment(config: ExecutorConfiguration, timeout: Double = 30, params: [String: Any], handleCompletion: @escaping (String) -> Void) {
-    let configuration = URLSessionConfiguration.default
-    configuration.timeoutIntervalForRequest = timeout
-    configuration.timeoutIntervalForResource = timeout
-    let session = URLSession(configuration: configuration)
-    
-    let urlComponents = NSURLComponents(string: config.baseUrl.absoluteString)!
-
-    urlComponents.queryItems = params.map{ (key, value) in
-        URLQueryItem(name: key, value: "\(value)")
+public extension HTTPResponse {
+    func appendBody<ValueType>(_ body: [String: ValueType]) where ValueType: Encodable {
+        self.appendBody(string: String(data: try! JSONEncoder().encode(body), encoding: .utf8)!)
     }
-
-    let url = urlComponents.url!
-    
-    var request = URLRequest(url: url)
-    print(url)
-    request.httpMethod = "GET"
-    // request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    // request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-    request.setValue(config.credentials, forHTTPHeaderField: "Authorization")
-    // do {
-    //     request.httpBody = try JSONSerialization.data(withJSONObject: parameters, options: .prettyPrinted)
-    // } catch let error {
-    //     print(error.localizedDescription)
-    // }
-    
-    let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
-        print(data, response, error)
-        do {
-            guard let unwrappedData = data else {
-                throw EncodingError.cannotEncodeObject(message: "Cannot unwrap response data")
-            }
-            guard let json = try JSONSerialization.jsonObject(with: unwrappedData, options: []) as? [String: Any] else {
-                throw EncodingError.cannotEncodeObject(message: "Cannot interpret json as a dictionary")
-            }
-            print("3")
-            handleCompletion(
-                "\(json["experiment-id"] ?? "")"
-            )
-        } catch let error {
-            print("Error occurred: \(error)")
-            print("2")
-            handleCompletion("")
-        }
-    })
-    
-    task.resume()
 }
-
-// extension Encodable {
-//   func asDictionary() throws -> [String: Any] {
-//     let data = try JSONEncoder().encode(self)
-//     guard let dictionary = try JSONSerialization.jsonObject(with: data, options: .allowFragments) as? [String: Any] else {
-//       throw EncodingError.cannotEncode(message: "Cannot encode the given object") 
-//     }
-//     return dictionary
-//   }
-// }
-
-// public extension Array where Element == (String, String) {
-//     subscript(index: String) -> String? {
-//         for item in self {
-//             if item.0 == index {
-//                 return item.1
-//             }
-//         }
-//         return Optional.none
-//     } 
-// }
-
-// private func encodeCredentials(login: String?, password: String?) -> String? {
-//     if let login_ = login, let password_ = password {
-//         return "\(login_):\(password_)".data(using: .utf8)!.base64EncodedString(options: Data.Base64EncodingOptions(rawValue: 0))
-//     }
-//     return Optional.none
-// }
 
 public let USERS_COLLECTION_NAME = "test-users"
 public let SIGN_IN_ROUTE = "/sign-in"
-public var activeTokens = [String: Double]()
-public let experimentExecutors = [
-    "link-prediction": [
-        ExecutorConfiguration(url: "http://localhost:1719", login:"", password: "")
-        // ExecutorConfiguration(url: "http://localhost:1721", login:"", password: "")
-    ]
-]
+public var activeTokens = ["kk": NSDate().timeIntervalSince1970] // [String: Double]()
+
 public let DEFAULT_LOAD_STATUS: Float = 10000
-
-// public let EXPERIMENTS_COLLECTION_NAME = "test-experiments"
-// public let N_MAX_CONCURRENT_EXPERIMENTS = 2
-
-// private var experimentConcurrencySemaphore = DispatchSemaphore(value: N_MAX_CONCURRENT_EXPERIMENTS)
-// private var nActiveExperimentsLock = NSLock()
-// private var nActiveExperiments = 0
 
 struct StartServer: ParsableCommand {
 
@@ -256,71 +128,30 @@ struct StartServer: ParsableCommand {
     }
 
     func startExperiment(request: HTTPRequest, response: HTTPResponse) {
+        response.setHeader(.contentType, value: "application/json")
         do {
             let requestBody = request.postBody ?? [String: Any]()
-            print("Starting an experiment with params: ")
-            print(requestBody)
+            let selectedExecutor = try selectExecutor(requestBody)
+        
+            var experimentId: String? = Optional.none
+            let tokenLock = NSLock()
 
-            // Select a free executor
+            tokenLock.lock()
 
-            let experimentTypeName = "\(requestBody["type"] ?? "")"
-            if let experimentExecutorUrls = experimentExecutors[experimentTypeName] {
-                print("Found executors: \(experimentExecutorUrls)")
-                
-                let group = DispatchGroup()
-                let loadStatusesLock = NSLock()
-                var loadStatuses = [ExecutorConfiguration: Float]()
-                
-                experimentExecutorUrls.map{ config in
-                    group.enter()
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        getExecutorLoadStatus(config: config) { loadStatus in
-                            print("entering...")
-                            if loadStatus < DEFAULT_LOAD_STATUS {
-                                loadStatusesLock.lock()
-                                loadStatuses[config] = loadStatus
-                                loadStatusesLock.unlock()
-                            }
-                            print("leaving...")
-                            group.leave()
-                        }
-                    }
-                }
+            executeExperiment(config: selectedExecutor, params: requestBody) { generatedExperimentId in
+                experimentId = generatedExperimentId
+                tokenLock.unlock()
+            }
 
-                print("waiting...")
-                group.wait()
-                print("load statuses:")
-                print(loadStatuses)
-
-                if loadStatuses.count < 1 {
-                    throw ExperimentError.executorsAreNotAvailable(message: "Cannot assign an executor")
-                }
-
-                let selectedExecutor = loadStatuses.min{foo, bar in foo.value < bar.value}!.key
-                print("Selected executor: \(selectedExecutor)")
-
-                var token = ""
-                var tokenLock = NSLock()
-
-                tokenLock.lock()
-
-                executeExperiment(config: selectedExecutor, params: requestBody) { experimentId in
-                    print("Experiment id: \(experimentId)")
-                    token = experimentId
-                    tokenLock.unlock()
-                    // response.setHeader(.contentType, value: "application/json")
-                    // response.appendBody(string: String(data: try! JSONEncoder().encode(["experiment-id": experimentId]), encoding: .utf8)!)
-                }
-                response.setHeader(.contentType, value: "application/json")
-                tokenLock.lock()
-                response.appendBody(string: String(data: try! JSONEncoder().encode(["experiment-id": token]), encoding: .utf8)!)
+            tokenLock.lock()
+            if let unwrappedExperimentId = experimentId {
+                response.appendBody(["experiment-id": unwrappedExperimentId])
             } else {
-                throw ExperimentError.executorsAreNotAvailable(message: "Cannot assign an executor")
+                throw ExperimentError.invalidExperimentArguments(message: "Provided parameter values are not correct")
             }
         } catch {
-            response.setHeader(.contentType, value: "text/html")
             response.status = .internalServerError
-            response.appendBody(string: "<html><title>Exception!</title><body>Experiment cannot be started</body></html>")
+            response.appendBody(["error": error.localizedDescription])
         }
         response.completed()
     }
@@ -338,7 +169,6 @@ struct StartServer: ParsableCommand {
                 let token = request.header(.authorization) ?? ""
                 if let tokenGenerationTimestamp = activeTokens[token] {
                     if NSDate().timeIntervalSince1970 - tokenGenerationTimestamp <= tokenMaxLifespan {
-                        // print(NSDate().timeIntervalSince1970 - tokenGenerationTimestamp)
                         callback(.continue(request, response))
                     } else {
                         activeTokens[token] = nil
