@@ -55,35 +55,9 @@ extension StartServer {
         do {
             if let unwrappedType = request.param(name: "type") {
                 let stringifiedType = "\(unwrappedType)"
-
-                // let experiment = Experiment()
-                // try experiment.get(stringifiedType)
-
-                // if experiment.id.isEmpty {
-                //     throw ExperimentError.cannotFindExperiment(message: "No experiment with id \(stringifiedType)")
-                // }
-
-                // print(dbClient.serverStatus())
-                // let queryBson = BSON()
-
-                // print(dbClient.getCollection(databaseName: "agk", collectionName: "test-users").count(query: BSON()))
-                // for item in dbClient.getCollection(databaseName: "agk", collectionName: "test-experiments").find()! {
-                    // print(item)
-                // }
-                // print(dbClient.getCollection(databaseName: "agk", collectionName: "test-users").getLastError())
-                // print(dbClient.getCollection(databaseName: "agk", collectionName: "test-users").find()?.jsonString)
-
-
-                // let user = User()
-                // try user.find(["login" : "zeio"])
-                // print(user.asData())
-
-                // let experiment = Experiment()
-                // let items = try experiment.findAll([String: Any]()) {
-                //     return Experiment()
-                // }
-
-                try response.appendBody(["items": try Experiment.findAll().map{$0.asDataDict()}])
+                try response.appendBody(["items": try Experiment.findAll().filter{$0.task == stringifiedType}.map{$0.asDataDict()}])
+                print(try Experiment.findAll().count)
+                // print(try Experiment.findAll().filter{$0.id == ""}.count)
             } else {
                 throw ExperimentError.cannotFindExperiment(message: "No id provided")
             }

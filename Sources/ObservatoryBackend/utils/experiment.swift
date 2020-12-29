@@ -2,14 +2,14 @@ import PerfectHTTP
 import Foundation
 
 public let experimentExecutors = [
-    "link-prediction": [
-        ExecutorConfiguration(url: "http://localhost:1719", login:"", password: ""),
-        ExecutorConfiguration(url: "http://localhost:1721", login:"", password: "")
+    "linkPrediction": [
+        ExecutorConfiguration(url: "http://localhost:1719", login:"", password: "")
+        // ExecutorConfiguration(url: "http://localhost:1721", login:"", password: "")
     ]
 ]
 
 public func selectExecutor(_ requestBody: [String: Any]) throws -> ExecutorConfiguration {
-    let experimentTypeName = "\(requestBody["type"] ?? "")"
+    let experimentTypeName = "\(requestBody["task"] ?? "")"
     if let experimentExecutorConfigs = experimentExecutors[experimentTypeName] {
         let group = DispatchGroup()
         let loadStatusesLock = NSLock()

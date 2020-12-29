@@ -24,14 +24,23 @@ public extension MongoDBStORM {
                 close(collection, client)
             }
 			let findObject = BSON(map: data)
+			var items = [Result]()
+			var nItemsInResult = 1
+			var offset = 0
 			do {
-				let response = collection.find(
-					query: findObject,
-					skip: cursor.offset,
-					limit: cursor.limit,
-					batchSize: cursor.totalRecords
-				)
-				return try processFullResponse(response!, makeItem: makeItem)
+				while nItemsInResult > 0 {
+					let response = collection.find(
+						query: findObject,
+						skip: offset,
+						limit: cursor.limit,
+						batchSize: cursor.totalRecords
+					)
+					let currentItems = try processFullResponse(response!, makeItem: makeItem)
+					offset += currentItems.count
+					nItemsInResult = currentItems.count
+					items += currentItems
+				}
+				return items
 			} catch {
 				throw error
 			}

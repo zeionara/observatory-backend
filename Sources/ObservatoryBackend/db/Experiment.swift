@@ -32,7 +32,7 @@ class Experiment: MongoDBStORM {
 		id				= this.data["_id"] as? String					??	""
         isCompleted		= this.data["isCompleted"] as? Bool				??	false
 		startTimestamp	= this.data["startTimestamp"] as? Double		??	NSDate().timeIntervalSince1970
-		startTimestamp	= this.data["completionTimestamp"] as? Double	??	NSDate().timeIntervalSince1970
+		completionTimestamp	= this.data["completionTimestamp"] as? Double	??	NSDate().timeIntervalSince1970
 		progress		= Float(this.data["progress"] as? Double				??	0.0)
 		metrics 		= (this.data["metrics"] as? [String: Any])?.map{(key, value) in
 			(key, Float(value as! Double))
@@ -55,12 +55,16 @@ class Experiment: MongoDBStORM {
 		}
 		return rows
 	}
+
+	public var task: String {
+		self.params["task"] as? String ?? ""
+	}
 }
 
 extension Experiment: FullyTraversible {
     static func findAll(_ data: [String : Any] = [String : Any]()) throws -> [Experiment] {
 		let experiment = Experiment()
-		return try experiment.findAll([String: Any]()) {
+		return try experiment.findAll(data) {
 			return Experiment()
 		}
     }
