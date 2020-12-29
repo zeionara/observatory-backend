@@ -5,14 +5,18 @@ import StORM
 import MongoDBStORM
 import Foundation
 import FoundationNetworking
-// import PerfectMongoDB
+import Logging
 
-public let USERS_COLLECTION_NAME = "test-users"
-public let EXPERIMENTS_COLLECTION_NAME = "test-experiments"
+public let USERS_COLLECTION_NAME = config["db"]["collections"]["users"].string ?? "users"
+public let EXPERIMENTS_COLLECTION_NAME = config["db"]["collections"]["experiments"].string ?? "experiments"
 public let SIGN_IN_ROUTE = "/sign-in"
-public var activeTokens = ["kk": NSDate().timeIntervalSince1970] // [String: Double]()
+public var activeTokens = config["predefinedAuthorizationTokens"].array!.map{$0.string!}.reduce([String: Double]()) { (dict, token) -> [String: Double] in
+    var dict = dict
+    dict[token] = NSDate().timeIntervalSince1970
+    return dict
+}
 
-public let DEFAULT_LOAD_STATUS: Float = 10000
+public let DEFAULT_LOAD_STATUS: Float = Float(config["defaultLoadStatus"].int ?? 10000)
 
 struct StartServer: ParsableCommand {
 
@@ -23,20 +27,8 @@ struct StartServer: ParsableCommand {
     @Option(name: .shortAndLong, help: "Port for the server to listen to")
     private var port: Int = 1720
 
-    @Option(help: "Database host")
-    private var dbHost: String = ""
-
-    @Option(help: "Database port")
-    private var dbPort: Int = 27017
-
-    @Option(help: "Database name")
-    private var dbName: String = ""
-
-    @Option(help: "Database username")
-    private var dbLogin: String = ""
-
-    @Option(help: "Database password")
-    private var dbPassword: String = ""
+    @Option(name: .shortAndLong, help: "Default logging level")
+    var loggingLevel: Logger.Level = .debug
 
     @Option(help: "Token length")
     internal var tokenLength: Int = 64
@@ -47,10 +39,6 @@ struct StartServer: ParsableCommand {
     @Option(help: "Number of seconds for authentication tokens to be active")
     private var tokenMaxLifespan: Double = 604800 // 1 week
 
-    // internal var dbClient: MongoClient {
-    //     try! MongoClient(uri: "mongodb+srv://\(dbLogin):\(dbPassword)@\(dbHost)")
-    // }
-
     func sendOptions(request: HTTPRequest, response: HTTPResponse) {
         response.completed()
     }
@@ -60,16 +48,18 @@ struct StartServer: ParsableCommand {
     }
 
     mutating func run() throws {
-        print("Starting an http server...")
-        print("Connecting to the databased on \(dbHost)...")
+        let logger = Logger("root", loggingLevel)
 
-        MongoDBConnection.host = dbHost
-        MongoDBConnection.database = dbName
-        MongoDBConnection.port = dbPort
+        logger.trace("Starting an http server...")
+        logger.trace("Connecting to the databased on \(env["AGK_DB_HOST"]!)...")
+
+        MongoDBConnection.host = env["AGK_DB_HOST"]!
+        MongoDBConnection.database = env["AGK_DB_NAME"]!
+        MongoDBConnection.port = Int(env["AGK_DB_PORT"]!)!
 
         MongoDBConnection.authmode = .standard
-        MongoDBConnection.username = dbLogin
-        MongoDBConnection.password = dbPassword
+        MongoDBConnection.username = env["AGK_DB_LOGIN"]!
+        MongoDBConnection.password = env["AGK_DB_PASSWORD"]!
         
         var routes = Routes()
         routes.add(method: .post, uri: SIGN_IN_ROUTE, handler: signIn)

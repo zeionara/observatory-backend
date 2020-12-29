@@ -1,0 +1,15 @@
+db:
+  collections:
+    experiments: test-experiments
+    users: test-users
+predefinedAuthorizationTokens:
+  - kk
+defaultLoadStatus: 10000
+executors:
+  linkPrediction:
+    - url: http://localhost:1719
+      login: 
+      password: 
+    - url: http://localhost:1721
+      login: 
+      password: 

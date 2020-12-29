@@ -12,14 +12,8 @@
             "program": "${workspaceFolder}/.build/debug/ObservatoryBackend",
             "args": [
                 "start-server",
-                "--db-host",
-                "-",
-                "--db-login",
-                "-",
-                "--db-password",
-                "-",
-                "--db-name",
-                "-"
+                "-l",
+                "trace"
             ],
             "cwd": "${workspaceFolder}",
             "sourceLanguages": [

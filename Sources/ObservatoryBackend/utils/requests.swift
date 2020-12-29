@@ -1,8 +1,10 @@
 import FoundationNetworking
 import Foundation
 import PerfectHTTP
+import Logging
 
-private func executeQuery(request: URLRequest, timeout: Double = 30, defaultResult: String = "", handleCompletion: @escaping ([String: Any]?) -> Void) {
+private func executeQuery(request: URLRequest, timeout: Double = 30, defaultResult: String = "", loggingLevel: Logger.Level = .debug, handleCompletion: @escaping ([String: Any]?) -> Void) {
+    let logger = Logger("query-executor", loggingLevel)
     let configuration = URLSessionConfiguration.default
     configuration.timeoutIntervalForRequest = timeout
     configuration.timeoutIntervalForResource = timeout
@@ -16,13 +18,11 @@ private func executeQuery(request: URLRequest, timeout: Double = 30, defaultResu
             guard let json = try JSONSerialization.jsonObject(with: unwrappedData, options: []) as? [String: Any] else {
                 throw EncodingError.cannotEncodeObject(message: "Cannot interpret json as a dictionary")
             }
-            print("3")
             handleCompletion(
                 json
             )
         } catch let error {
-            print("Error occurred: \(error)")
-            print("2")
+            logger.error("Error during query execution: \(error)")
             handleCompletion(
                 Optional.none
             )
@@ -31,18 +31,22 @@ private func executeQuery(request: URLRequest, timeout: Double = 30, defaultResu
     task.resume()
 }
 
-public func getExecutorLoadStatus(config: ExecutorConfiguration, timeout: Double = 30, handleCompletion: @escaping (Float) -> Void) {
+public func getExecutorLoadStatus(config: ExecutorConfiguration, timeout: Double = 30, loggingLevel: Logger.Level = .debug, handleCompletion: @escaping (Float) -> Void) {
     var request = URLRequest(url: config.loadStatusUrl)
-    
+    let logger = Logger("executor-load-status-checker", loggingLevel)
+
     request.httpMethod = "GET"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.addValue("application/json", forHTTPHeaderField: "Accept")
     request.setValue(config.credentials, forHTTPHeaderField: "Authorization")
     
-    executeQuery(request: request, timeout: timeout) { json in
+    executeQuery(request: request, timeout: timeout, loggingLevel: loggingLevel) { json in
+        logger.debug("Handling load status response...")
         if let unwrappedJson = json {
+            logger.debug("Calling completion handler...")
             handleCompletion(("\(unwrappedJson["value"] ?? "\(DEFAULT_LOAD_STATUS)")" as NSString).floatValue)
         } else {
+            logger.debug("Calling completion handler...")
             handleCompletion(DEFAULT_LOAD_STATUS)
         }
     }
