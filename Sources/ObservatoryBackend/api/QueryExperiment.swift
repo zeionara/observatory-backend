@@ -56,8 +56,6 @@ extension StartServer {
             if let unwrappedType = request.param(name: "type") {
                 let stringifiedType = "\(unwrappedType)"
                 try response.appendBody(["items": try Experiment.findAll().filter{$0.task == stringifiedType}.map{$0.asDataDict()}])
-                print(try Experiment.findAll().count)
-                // print(try Experiment.findAll().filter{$0.id == ""}.count)
             } else {
                 throw ExperimentError.cannotFindExperiment(message: "No id provided")
             }
